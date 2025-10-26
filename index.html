@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Gamified To-Do + Custom Pomodoro</title>
+<style>
+body{font-family:'Poppins',sans-serif;background:linear-gradient(135deg,#171c28,#1f2937);
+color:#fff;display:flex;flex-direction:column;align-items:center;min-height:100vh;margin:0;padding:20px;overflow-x:hidden;}
+h1{color:#60a5fa;margin-bottom:10px;}
+#levelDisplay{font-size:18px;margin-bottom:10px;}
+#expDisplay{background:#2563eb;border-radius:12px;padding:8px 16px;margin-bottom:10px;}
+#progressContainer{width:300px;height:20px;background:#1e293b;border-radius:10px;overflow:hidden;
+margin-bottom:30px;box-shadow:inset 0 0 4px rgba(0,0,0,.4);}
+#progressBar{height:100%;width:0%;background:linear-gradient(90deg,#60a5fa,#3b82f6);
+transition:width .5s ease,background 1s ease;}
+.container{display:flex;flex-wrap:wrap;justify-content:center;gap:20px;width:100%;max-width:1200px;}
+.card{background:#111827;border-radius:16px;padding:20px;box-shadow:0 4px 10px rgba(0,0,0,.3);width:350px;}
+input,button{border:none;border-radius:8px;padding:8px;font-size:14px;margin:4px 0;}
+button{background:#2563eb;color:white;cursor:pointer;}button:hover{background:#3b82f6;}
+ul{list-style:none;padding:0;}
+li{background:#1e293b;margin:5px 0;padding:8px 12px;border-radius:8px;
+display:flex;justify-content:space-between;align-items:center;}
+li span.editable{cursor:pointer;border-bottom:1px dotted transparent;}
+li span.editable:hover{border-color:#60a5fa;}
+.deleteBtn{background:#dc2626;margin-left:4px;} .deleteBtn:hover{background:#ef4444;}
+input[type="number"]{width:90px;}
+.xp-float{position:absolute;font-weight:bold;pointer-events:none;opacity:1;
+transform:translateY(0) scale(1);animation:floatUp 1.2s ease-out forwards;}
+@keyframes floatUp{0%{opacity:1;transform:translateY(0) scale(1);}
+80%{opacity:1;transform:translateY(-40px) scale(1.2);}
+100%{opacity:0;transform:translateY(-60px) scale(1.3);}}
+
+/* Pomodoro overlay */
+#pomodoroOverlay{position:fixed;top:0;left:0;width:100%;height:100%;
+background:rgba(0,0,0,.9);display:none;flex-direction:column;justify-content:center;align-items:center;z-index:10;}
+#pomodoroBox{background:#1e293b;padding:30px;border-radius:20px;text-align:center;width:320px;
+box-shadow:0 0 20px rgba(0,0,0,.5);}
+#pomodoroTimer{font-size:48px;margin:20px 0;}
+#focusCircle{width:120px;height:120px;border-radius:50%;
+background:radial-gradient(circle,#2563eb 0%,#1d4ed8 70%,transparent 100%);
+animation:pulse 2s infinite ease-in-out;margin:auto;}
+#breakCircle{width:120px;height:120px;border-radius:50%;
+background:radial-gradient(circle,#16a34a 0%,#15803d 70%,transparent 100%);
+animation:pulse 2s infinite ease-in-out;margin:auto;display:none;}
+@keyframes pulse{0%,100%{transform:scale(1);}50%{transform:scale(1.1);}}
+
+/* Buttons */
+.pomo-btn{margin:5px;padding:8px 14px;border-radius:8px;font-size:14px;}
+.exit{background:#dc2626;} .exit:hover{background:#ef4444;}
+.done{background:#16a34a;} .done:hover{background:#22c55e;}
+.pause{background:#f59e0b;} .pause:hover{background:#fbbf24;}
+</style>
+</head>
+<body>
+
+<h1>🎯 XP To-Do + Reward Store</h1>
+<div id="levelDisplay">Level: <span id="level">1</span></div>
+<div id="expDisplay">Total EXP: <span id="expPoints">0.00</span></div>
+<div id="progressContainer"><div id="progressBar"></div></div>
+
+<div class="container">
+  <div class="card">
+    <h2>✅ To-Do List</h2>
+    <input id="taskName" type="text" placeholder="New task...">
+    <input id="taskXP" type="number" placeholder="XP" min="0.01" step="0.01">
+    <button onclick="addTask()">Add Task</button>
+    <ul id="taskList"></ul>
+  </div>
+
+  <div class="card">
+    <h2>🎁 Reward Store</h2>
+    <input id="rewardName" type="text" placeholder="New reward...">
+    <input id="rewardCost" type="number" placeholder="Cost XP" min="0.01" step="0.01">
+    <button onclick="addReward()">Add Reward</button>
+    <ul id="rewardList"></ul>
+  </div>
+
+  <div class="card">
+    <h2>📅 History (Today)</h2>
+    <ul id="historyList"></ul>
+  </div>
+
+  <div class="card">
+    <h2>⏱️ Pomodoro Settings</h2>
+    <label>Focus (min): <input id="focusInput" type="number" min="1" step="1"></label><br>
+    <label>Break (min): <input id="breakInput" type="number" min="1" step="1"></label><br>
+    <button onclick="saveSettings()">Save Settings</button>
+  </div>
+</div>
+
+<!-- Pomodoro overlay -->
+<div id="pomodoroOverlay">
+  <div id="pomodoroBox">
+    <h2 id="pomoTaskTitle"></h2>
+    <div id="focusCircle"></div>
+    <div id="breakCircle"></div>
+    <div id="pomodoroTimer">25:00</div>
+    <div>
+      <button class="pomo-btn pause" onclick="togglePause()">⏸️ Pause</button>
+      <button class="pomo-btn done" onclick="completePomodoro()">✅ Done</button>
+      <button class="pomo-btn exit" onclick="exitPomodoro()">❌ Exit</button>
+    </div>
+  </div>
+</div>
+
+<audio id="bellSound" src="https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg"></audio>
+
+<script>
+let exp=parseFloat(localStorage.getItem("exp"))||0;
+let tasks=JSON.parse(localStorage.getItem("tasks"))||[];
+let rewards=JSON.parse(localStorage.getItem("rewards"))||[];
+let history=JSON.parse(localStorage.getItem("history"))||{};
+const today=new Date().toISOString().slice(0,10);
+if(!history[today])history[today]=[];
+
+let focusMinutes=parseInt(localStorage.getItem("focusMinutes"))||25;
+let breakMinutes=parseInt(localStorage.getItem("breakMinutes"))||5;
+
+const expDisplay=document.getElementById("expPoints");
+const levelDisplay=document.getElementById("level");
+const progressBar=document.getElementById("progressBar");
+const taskList=document.getElementById("taskList");
+const rewardList=document.getElementById("rewardList");
+const historyList=document.getElementById("historyList");
+const bell=document.getElementById("bellSound");
+
+function getLevel(){return Math.floor(exp/100)+1;}
+function getBarColor(l){if(l<3)return"linear-gradient(90deg,#60a5fa,#3b82f6)";
+if(l<6)return"linear-gradient(90deg,#9333ea,#a855f7)";
+if(l<10)return"linear-gradient(90deg,#f59e0b,#fbbf24)";
+return"linear-gradient(90deg,#facc15,#fcd34d)";}
+function updateProgressBar(){const l=getLevel();const p=(exp%100);
+progressBar.style.width=`${p}%`;progressBar.style.background=getBarColor(l);
+levelDisplay.textContent=l;}
+function saveData(){localStorage.setItem("exp",exp.toFixed(2));
+localStorage.setItem("tasks",JSON.stringify(tasks));
+localStorage.setItem("rewards",JSON.stringify(rewards));
+localStorage.setItem("history",JSON.stringify(history));
+expDisplay.textContent=exp.toFixed(2);updateProgressBar();renderHistory();}
+function saveSettings(){
+ focusMinutes=parseInt(document.getElementById("focusInput").value)||25;
+ breakMinutes=parseInt(document.getElementById("breakInput").value)||5;
+ localStorage.setItem("focusMinutes",focusMinutes);
+ localStorage.setItem("breakMinutes",breakMinutes);
+ alert(`Pomodoro saved: ${focusMinutes}m focus / ${breakMinutes}m break`);
+}
+
+/* ---------- Rendering ---------- */
+function renderTasks(){
+ taskList.innerHTML="";
+ tasks.forEach((t,i)=>{
+   const li=document.createElement("li");
+   const name=document.createElement("span");
+   name.className="editable";name.textContent=t.name;
+   name.onclick=()=>editName(tasks,i,"task");
+   li.appendChild(name);
+   const right=document.createElement("div");
+   right.innerHTML=`<span>${t.xp} XP</span>`;
+   const play=document.createElement("button");
+   play.textContent="🎮 Focus";play.onclick=()=>startPomodoro(i);
+   const done=document.createElement("button");
+   done.textContent="✔";done.onclick=e=>completeTask(i,e);
+   const del=document.createElement("button");
+   del.textContent="🗑️";del.className="deleteBtn";del.onclick=()=>deleteItem(tasks,i,"task");
+   right.append(play,done,del);li.append(right);taskList.append(li);
+ });
+}
+function renderRewards(){
+ rewardList.innerHTML="";
+ rewards.forEach((r,i)=>{
+   const li=document.createElement("li");
+   const name=document.createElement("span");
+   name.className="editable";name.textContent=r.name;
+   name.onclick=()=>editName(rewards,i,"reward");
+   li.appendChild(name);
+   const right=document.createElement("div");
+   right.innerHTML=`<span>-${r.cost} XP</span>`;
+   const buy=document.createElement("button");
+   buy.textContent="Buy";buy.onclick=()=>redeemReward(i);
+   const del=document.createElement("button");
+   del.textContent="🗑️";del.className="deleteBtn";del.onclick=()=>deleteItem(rewards,i,"reward");
+   right.append(buy,del);li.append(right);rewardList.append(li);
+ });
+}
+function renderHistory(){
+ historyList.innerHTML="";
+ (history[today]||[]).forEach(h=>{
+   const li=document.createElement("li");
+   li.textContent=`${h.name} – ${h.pomodoros} Pomodoro(s) +${h.xp} XP`;
+   historyList.append(li);
+ });
+}
+
+/* ---------- Logic ---------- */
+function editName(list,i,type){
+ const n=prompt(`Edit ${type} name:`,list[i].name);
+ if(n&&n.trim()!==""){list[i].name=n.trim();saveData();
+ type==="task"?renderTasks():renderRewards();}
+}
+function deleteItem(list,i,type){
+ if(confirm(`Delete this ${type}?`)){list.splice(i,1);saveData();
+ type==="task"?renderTasks():renderRewards();}
+}
+function addTask(){
+ const n=document.getElementById("taskName").value.trim();
+ const xp=parseFloat(document.getElementById("taskXP").value);
+ if(!n||isNaN(xp))return alert("Enter task and XP");
+ tasks.push({name:n,xp});document.getElementById("taskName").value="";
+ document.getElementById("taskXP").value="";saveData();renderTasks();
+}
+function addReward(){
+ const n=document.getElementById("rewardName").value.trim();
+ const c=parseFloat(document.getElementById("rewardCost").value);
+ if(!n||isNaN(c))return alert("Enter reward and cost");
+ rewards.push({name:n,cost:c});document.getElementById("rewardName").value="";
+ document.getElementById("rewardCost").value="";saveData();renderRewards();
+}
+function createXPFloat(xp,e){
+ const s=document.createElement("span");s.className="xp-float";s.textContent=`+${xp} XP`;
+ let color="#60a5fa",size="16px";
+ if(xp>=5&&xp<10){color="#38bdf8";size="18px";}
+ else if(xp>=10&&xp<20){color="#fbbf24";size="20px";}
+ else if(xp>=20){color="#facc15";size="22px";s.style.textShadow="0 0 8px #facc15";}
+ s.style.color=color;s.style.fontSize=size;document.body.appendChild(s);
+ const r=e.target.getBoundingClientRect();s.style.left=r.left+r.width/2+"px";
+ s.style.top=r.top-10+"px";setTimeout(()=>s.remove(),1200);
+}
+function completeTask(i,e){
+ const before=getLevel();const g=parseFloat(tasks[i].xp);
+ exp+=g;createXPFloat(g,e);
+ history[today].push({name:tasks[i].name,xp:g,pomodoros:0});
+ tasks.splice(i,1);saveData();renderTasks();
+ const after=getLevel();if(after>before)alert(`🏆 Level Up! Level ${after}!`);
+}
+function redeemReward(i){
+ const c=parseFloat(rewards[i].cost);
+ if(exp<c)return alert("Not enough XP!");exp-=c;saveData();renderRewards();
+}
+
+/* ---------- Pomodoro ---------- */
+let pomoIndex=null,pomoTimer=null,secondsLeft=0,pomoCount=0,isPaused=false,isBreak=false;
+const overlay=document.getElementById("pomodoroOverlay");
+const timerDisplay=document.getElementById("pomodoroTimer");
+const titleDisplay=document.getElementById("pomoTaskTitle");
+const focusCircle=document.getElementById("focusCircle");
+const breakCircle=document.getElementById("breakCircle");
+
+function startPomodoro(i){
+ pomoIndex=i;pomoCount=0;secondsLeft=focusMinutes*60;isPaused=false;isBreak=false;
+ titleDisplay.textContent=`🍅 Focus: ${tasks[i].name}`;
+ overlay.style.display="flex";updateTimerDisplay();
+ focusCircle.style.display="block";breakCircle.style.display="none";
+ clearInterval(pomoTimer);pomoTimer=setInterval(runPomodoro,1000);
+}
+function runPomodoro(){
+ if(isPaused)return;
+ secondsLeft--;
+ if(secondsLeft<=0){
+   clearInterval(pomoTimer);bell.play();
+   if(!isBreak){pomoCount++;startBreak();}
+   else{startNextFocus();}
+ }
+ updateTimerDisplay();
+}
+function startBreak(){
+ isBreak=true;secondsLeft=breakMinutes*60;focusCircle.style.display="none";
+ breakCircle.style.display="block";titleDisplay.textContent="🧘 Short Break";
+ pomoTimer=setInterval(runPomodoro,1000);
+}
+function startNextFocus(){
+ isBreak=false;secondsLeft=focusMinutes*60;focusCircle.style.display="block";
+ breakCircle.style.display="none";titleDisplay.textContent=`🍅 Focus: ${tasks[pomoIndex].name}`;
+ bell.play();pomoTimer=setInterval(runPomodoro,1000);
+}
+function updateTimerDisplay(){
+ const m=Math.floor(secondsLeft/60),s=secondsLeft%60;
+ timerDisplay.textContent=`${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+}
+function togglePause(){isPaused=!isPaused;}
+function exitPomodoro(){
+ clearInterval(pomoTimer);overlay.style.display="none";
+ pomoIndex=null;secondsLeft=0;isPaused=false;isBreak=false;
+}
+function completePomodoro(){
+ clearInterval(pomoTimer);overlay.style.display="none";
+ if(pomoIndex===null)return;
+ const done=confirm(`Finish "${tasks[pomoIndex].name}"?\nPomodoros: ${pomoCount}`);
+ if(done){
+   const xpGain=parseFloat(tasks[pomoIndex].xp);
+   exp+=xpGain;
+   history[today].push({name:tasks[pomoIndex].name,xp:xpGain,pomodoros:pomoCount});
+   tasks.splice(pomoIndex,1);
+   alert(`✅ Completed in ${pomoCount} Pomodoro(s)! +${xpGain} XP`);
+   saveData();renderTasks();
+ }
+ pomoIndex=null;secondsLeft=0;isPaused=false;isBreak=false;
+}
+
+/* ---------- Init ---------- */
+window.onload=()=>{
+ document.getElementById("focusInput").value=focusMinutes;
+ document.getElementById("breakInput").value=breakMinutes;
+ expDisplay.textContent=exp.toFixed(2);
+ renderTasks();renderRewards();renderHistory();updateProgressBar();
+};
+</script>
+</body>
+</html>
